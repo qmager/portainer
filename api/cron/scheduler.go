@@ -2,7 +2,7 @@ package cron
 
 import (
 	"github.com/portainer/portainer/api"
-	"github.com/robfig/cron"
+	"github.com/robfig/cron/v3"
 )
 
 // JobScheduler represents a service for managing crons
@@ -13,7 +13,7 @@ type JobScheduler struct {
 // NewJobScheduler initializes a new service
 func NewJobScheduler() *JobScheduler {
 	return &JobScheduler{
-		cron: cron.New(cron.WithSeconds()),
+		cron: cron.New(),
 	}
 }
 

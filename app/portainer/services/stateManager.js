@@ -2,8 +2,8 @@ import _ from 'lodash-es';
 import moment from 'moment';
 
 angular.module('portainer.app')
-.factory('StateManager', ['$q', 'SystemService', 'InfoHelper', 'LocalStorage', 'SettingsService', 'StatusService', 'APPLICATION_CACHE_VALIDITY', 'AgentPingService',
-function StateManagerFactory($q, SystemService, InfoHelper, LocalStorage, SettingsService, StatusService, APPLICATION_CACHE_VALIDITY, AgentPingService) {
+.factory('StateManager', ['$q', 'SystemService', 'InfoHelper', 'EndpointProvider', 'LocalStorage', 'SettingsService', 'StatusService', 'APPLICATION_CACHE_VALIDITY', 'AgentPingService',
+function StateManagerFactory($q, SystemService, InfoHelper, EndpointProvider, LocalStorage, SettingsService, StatusService, APPLICATION_CACHE_VALIDITY, AgentPingService) {
   'use strict';
 
   var manager = {};
@@ -58,6 +58,11 @@ function StateManagerFactory($q, SystemService, InfoHelper, LocalStorage, Settin
     LocalStorage.storeApplicationState(state.application);
   };
 
+  manager.updateEnableVolumeBrowserForNonAdminUsers = function(enableVolumeBrowserForNonAdminUsers) {
+    state.application.enableVolumeBrowserForNonAdminUsers = enableVolumeBrowserForNonAdminUsers;
+    LocalStorage.storeApplicationState(state.application);
+  };
+
  function assignStateFromStatusAndSettings(status, settings) {
    state.application.authentication = status.Authentication;
    state.application.analytics = status.Analytics;
@@ -67,6 +72,7 @@ function StateManagerFactory($q, SystemService, InfoHelper, LocalStorage, Settin
    state.application.logo = settings.LogoURL;
    state.application.snapshotInterval = settings.SnapshotInterval;
    state.application.enableHostManagementFeatures = settings.EnableHostManagementFeatures;
+   state.application.enableVolumeBrowserForNonAdminUsers = settings.AllowVolumeBrowserForRegularUsers;
    state.application.validity = moment().unix();
  }
 
@@ -118,12 +124,8 @@ function StateManagerFactory($q, SystemService, InfoHelper, LocalStorage, Settin
       var cacheValidity = now - applicationState.validity;
       if (cacheValidity > APPLICATION_CACHE_VALIDITY) {
         loadApplicationState()
-        .then(function success() {
-          deferred.resolve(state);
-        })
-        .catch(function error(err) {
-          deferred.reject(err);
-        });
+        .then(() => deferred.resolve(state))
+        .catch((err) => deferred.reject(err));
       } else {
         state.application = applicationState;
         state.loading = false;
@@ -131,12 +133,8 @@ function StateManagerFactory($q, SystemService, InfoHelper, LocalStorage, Settin
       }
     } else {
       loadApplicationState()
-      .then(function success() {
-        deferred.resolve(state);
-      })
-      .catch(function error(err) {
-        deferred.reject(err);
-      });
+      .then(() => deferred.resolve(state))
+      .catch((err) => deferred.reject(err));
     }
 
     return deferred.promise;

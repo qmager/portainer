@@ -259,6 +259,7 @@ func initSettings(settingsService portainer.SettingsService, flags *portainer.CL
 			LogoURL:              *flags.Logo,
 			AuthenticationMethod: portainer.AuthenticationInternal,
 			LDAPSettings: portainer.LDAPSettings{
+				AnonymousMode: true,
 				AutoCreateUsers: true,
 				TLSConfig:       portainer.TLSConfiguration{},
 				SearchSettings: []portainer.LDAPSearchSettings{
@@ -271,6 +272,7 @@ func initSettings(settingsService portainer.SettingsService, flags *portainer.CL
 			OAuthSettings:                      portainer.OAuthSettings{},
 			AllowBindMountsForRegularUsers:     true,
 			AllowPrivilegedModeForRegularUsers: true,
+			AllowVolumeBrowserForRegularUsers:  false,
 			EnableHostManagementFeatures:       false,
 			SnapshotInterval:                   *flags.SnapshotInterval,
 			EdgeAgentCheckinInterval:           portainer.DefaultEdgeAgentCheckinIntervalInSeconds,
@@ -488,24 +490,9 @@ func initJobService(dockerClientFactory *docker.ClientFactory) portainer.JobServ
 func initExtensionManager(fileService portainer.FileService, extensionService portainer.ExtensionService) (portainer.ExtensionManager, error) {
 	extensionManager := exec.NewExtensionManager(fileService, extensionService)
 
-	extensions, err := extensionService.Extensions()
+	err := extensionManager.StartExtensions()
 	if err != nil {
 		return nil, err
-	}
-
-	for _, extension := range extensions {
-		err := extensionManager.EnableExtension(&extension, extension.License.LicenseKey)
-		if err != nil {
-			log.Printf("Unable to enable extension: %s [extension: %s]", err.Error(), extension.Name)
-			extension.Enabled = false
-			extension.License.Valid = false
-		}
-
-		err = extensionService.Persist(&extension)
-		if err != nil {
-			return nil, err
-		}
-
 	}
 
 	return extensionManager, nil
@@ -623,7 +610,7 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		adminPasswordHash, err = cryptoService.Hash(string(content))
+		adminPasswordHash, err = cryptoService.Hash(strings.TrimSuffix(string(content), "\n"))
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -638,7 +625,7 @@ func main() {
 		}
 
 		if len(users) == 0 {
-			log.Printf("Creating admin user with password hash %s", adminPasswordHash)
+			log.Println("Created admin user with the given password.")
 			user := &portainer.User{
 				Username:                "admin",
 				Role:                    portainer.AdministratorRole,

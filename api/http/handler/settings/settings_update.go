@@ -19,6 +19,7 @@ type settingsUpdatePayload struct {
 	OAuthSettings                      *portainer.OAuthSettings
 	AllowBindMountsForRegularUsers     *bool
 	AllowPrivilegedModeForRegularUsers *bool
+	AllowVolumeBrowserForRegularUsers  *bool
 	EnableHostManagementFeatures       *bool
 	SnapshotInterval                   *string
 	TemplatesURL                       *string
@@ -68,11 +69,16 @@ func (handler *Handler) settingsUpdate(w http.ResponseWriter, r *http.Request) *
 	}
 
 	if payload.LDAPSettings != nil {
+		ldapReaderDN := settings.LDAPSettings.ReaderDN
 		ldapPassword := settings.LDAPSettings.Password
+		if payload.LDAPSettings.ReaderDN != "" {
+			ldapReaderDN = payload.LDAPSettings.ReaderDN
+		}
 		if payload.LDAPSettings.Password != "" {
 			ldapPassword = payload.LDAPSettings.Password
 		}
 		settings.LDAPSettings = *payload.LDAPSettings
+		settings.LDAPSettings.ReaderDN = ldapReaderDN
 		settings.LDAPSettings.Password = ldapPassword
 	}
 
@@ -91,6 +97,12 @@ func (handler *Handler) settingsUpdate(w http.ResponseWriter, r *http.Request) *
 
 	if payload.AllowPrivilegedModeForRegularUsers != nil {
 		settings.AllowPrivilegedModeForRegularUsers = *payload.AllowPrivilegedModeForRegularUsers
+	}
+
+	updateAuthorizations := false
+	if payload.AllowVolumeBrowserForRegularUsers != nil {
+		settings.AllowVolumeBrowserForRegularUsers = *payload.AllowVolumeBrowserForRegularUsers
+		updateAuthorizations = true
 	}
 
 	if payload.EnableHostManagementFeatures != nil {
@@ -118,7 +130,35 @@ func (handler *Handler) settingsUpdate(w http.ResponseWriter, r *http.Request) *
 		return &httperror.HandlerError{http.StatusInternalServerError, "Unable to persist settings changes inside the database", err}
 	}
 
+	if updateAuthorizations {
+		err := handler.updateVolumeBrowserSetting(settings)
+		if err != nil {
+			return &httperror.HandlerError{http.StatusInternalServerError, "Unable to update RBAC authorizations", err}
+		}
+	}
+
 	return response.JSON(w, settings)
+}
+
+func (handler *Handler) updateVolumeBrowserSetting(settings *portainer.Settings) error {
+	err := handler.AuthorizationService.UpdateVolumeBrowsingAuthorizations(settings.AllowVolumeBrowserForRegularUsers)
+	if err != nil {
+		return err
+	}
+
+	extension, err := handler.ExtensionService.Extension(portainer.RBACExtension)
+	if err != nil && err != portainer.ErrObjectNotFound {
+		return err
+	}
+
+	if extension != nil {
+		err = handler.AuthorizationService.UpdateUsersAuthorizations()
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (handler *Handler) updateSnapshotInterval(settings *portainer.Settings, snapshotInterval string) error {
